@@ -1,0 +1,258 @@
+import discord
+from discord.ext import commands
+import json
+import asyncio
+from keep_alive import keep_alive
+keep_alive()
+
+intents = discord.Intents.all()
+intents.messages = True
+intents.guilds = True
+intents.members = True
+intents.guild_messages = True
+
+bot = commands.Bot(command_prefix='.', intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user.name}')
+    print('Bot is ready to respond to commands.')
+
+def is_allowed(ctx):
+    return ctx.author.id in ALLOWED_USER_IDS
+
+# Replace 'ALLOWED_USER_IDS' with a list of user IDs allowed to add/remove users
+ALLOWED_USER_IDS = [915483308522086460, 987654321098765432, 639009151187681287]  # Add your allowed user IDs
+
+# Function to load snipe list from snipes.json file or initialize as an empty list if the file is empty or missing
+def load_snipe_list():
+    try:
+        with open('snipes.json', 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+channel_count = 1
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    global channel_count
+
+    if after.channel is not None and after.channel != before.channel:  # Check if the member joined a new voice channel
+        if after.channel.name == "Join To Create":  # Check if the member joined the General channel
+            guild = member.guild
+            category = after.channel.category  # Get the category of the voice channel
+
+            # Create a new voice channel for the member
+            new_channel = await category.create_voice_channel(f"{member.display_name}'s vc")  # Create a new voice channel with member's display name
+            await new_channel.edit(user_limit=2)  # Set the user limit to 2 for the new channel
+
+            # Move the member to the created channel
+            await member.move_to(new_channel)
+
+    if before.channel:  # Check if someone leaves a channel
+        if len(before.channel.members) == 0 and before.channel.name.endswith("'s vc"):
+            # Check if the channel is empty and matches the naming format
+            await before.channel.delete()  # Delete the channel if it's empty and matches the naming format
+
+# Define the team_data dictionary at the beginning of the script
+team_data = {}  # Dictionary to hold teams
+
+@bot.command(name="limit", description="Sets the user limit for a voice channel")
+async def limit(ctx, limit: int = None):
+    if limit is None:
+        await ctx.send("Please provide a user limit.")
+    else:
+        # Code to set the user limit of the voice channel
+        await ctx.send(f"User limit set to {limit}.")
+
+# Function to load safelist names from safelist.json file or initialize as an empty list if the file is empty or missing
+def load_safelist_names():
+    try:
+        with open('safelist.json', 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+def load_botlist_names():
+  try:
+      with open('botlist.json', 'r') as f:
+          return json.load(f)
+  except (FileNotFoundError, json.JSONDecodeError):
+      return []
+
+# Function to save snipe list to snipes.json file
+def save_snipe_list():
+    with open('snipes.json', 'w') as f:
+        json.dump(snipe_list, f, indent=4)
+
+# Function to save safelist names to safelist.json file
+def save_safelist_names():
+    with open('safelist.json', 'w') as f:
+        json.dump(safelist_names, f, indent=4)
+
+def save_botlist_names():
+  with open('botlist.json', 'w') as f:
+      json.dump(botlist_names, f, indent=4)
+
+snipe_list = load_snipe_list()
+safelist_names = load_safelist_names()
+botlist_names = load_botlist_names()
+
+# Snipelist names
+@bot.command()
+async def snipelist(ctx):
+    if not snipe_list:
+        await ctx.send('The snipe list is empty.')
+    else:
+        snipe_list_sorted = sorted(snipe_list)
+        formatted_snipe_list = '\n'.join([f'- {name}' for name in snipe_list_sorted])
+        embed = discord.Embed(
+            title='Snipe List',
+            description=formatted_snipe_list,
+            color=discord.Color.blue()
+        )
+        await ctx.send(embed=embed)
+
+# Safelist names
+@bot.command()
+async def safelist(ctx):
+    if not safelist_names:
+        await ctx.send('The safelist is empty.')
+    else:
+        names = '\n'.join(safelist_names)
+        embed = discord.Embed(
+            title='Safe List',
+            description=names,
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=embed)
+
+@bot.command()
+@commands.check(is_allowed)
+async def snipelistadd(ctx, *, name):
+    if name not in snipe_list:
+        snipe_list.append(name)
+        save_snipe_list()
+        embed = discord.Embed(
+            title='Snipe List',
+            description=f'Added {name} to the snipe list!',
+            color=discord.Color.blue()
+        )
+        await ctx.send(embed=embed)
+    else:
+        await ctx.send(f'{name} is already in the snipe list.')
+
+@bot.command()
+@commands.check(is_allowed)
+async def snipelistremove(ctx, *, name):
+    if name in snipe_list:
+        snipe_list.remove(name)
+        save_snipe_list()
+        await ctx.send(f'Removed {name} from the snipe list.')
+    else:
+        await ctx.send(f'{name} is not in the snipe list.')
+
+@bot.command()
+@commands.check(is_allowed)
+async def safelistremove(ctx, *, name):
+    if name in safelist_names:
+        safelist_names.remove(name)
+        save_safelist_names()
+        await ctx.send(f'Removed {name} from the safe list.')
+    else:
+        await ctx.send(f'{name} is not in the safe list.')
+
+@bot.command()
+async def botlist(ctx):
+    if not botlist_names:
+        await ctx.send('The botlist is empty.')
+    else:
+        botlist_sorted = sorted(botlist_names)
+        formatted_botlist = '\n'.join([f'- {name}' for name in botlist_sorted])
+        embed = discord.Embed(
+            title='Bot List',
+            description=formatted_botlist,
+            color=discord.Color.orange()
+        )
+        await ctx.send(embed=embed)
+
+@bot.command()
+@commands.check(is_allowed)
+async def botlistadd(ctx, *, name):
+    if name not in botlist_names:
+        botlist_names.append(name)
+        save_botlist_names()
+        await ctx.send(f'Added {name} to the bot list.')
+    else:
+        await ctx.send(f'{name} is already in the bot list.')
+
+@bot.command()
+@commands.check(is_allowed)
+async def safelistadd(ctx, *, name):
+    if name not in safelist_names:
+        safelist_names.append(name)
+        save_safelist_names()
+        await ctx.send(f'Added {name} to the safe list.')
+    else:
+        await ctx.send(f'{name} is already in the safe list.')
+
+@bot.command()
+@commands.check(is_allowed)
+async def botlistremove(ctx, *, name):
+    if name in botlist_names:
+        botlist_names.remove(name)
+        save_botlist_names()
+        await ctx.send(f'Removed {name} from the bot list.')
+    else:
+        await ctx.send(f'{name} is not in the bot list.')
+
+@bot.command()
+async def report(ctx, *, bug: str):
+    user = ctx.author
+    bug_receiver_id = 915483308522086460  # Replace with the receiver's ID
+
+    receiver = await bot.fetch_user(bug_receiver_id)
+
+    embed = discord.Embed(title="Bug Report", color=0xFF0000)
+    embed.add_field(name="Reported by", value=user.mention, inline=False)
+    embed.add_field(name="Bug Description", value=bug, inline=False)
+
+    await receiver.send(embed=embed)
+    await ctx.send("Bug report has been sent successfully!")
+
+@bot.command()
+async def commands(ctx):
+    command_list = [
+        "**Commands List**",
+        "`.snipelist` - Displays the snipe list",
+        "`.snipelistadd <name>` - Add a name to the snipe list",
+        "`.snipelistremove <name>` - Remove a name from the snipe list",
+        "`.safelist` - Displays the safe list",
+        "`.safelistadd <name>` - Add a name to the safe list",
+        "`.safelistremove <name>` - Remove a name from the safe list",
+        "`.report <bug>` - Report bugs",
+        "`.commands` - Displays available commands"
+    ]
+
+    embed = discord.Embed(
+        title='Commands List',
+        description='\n'.join(command_list),
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def request(ctx, *, user_request):
+    # Replace 'your_user_id_here' with the actual user ID to send the request
+    user_id = 915483308522086460  # Replace with the desired user ID
+
+    user = bot.get_user(user_id)
+    if user:
+        await user.send(f"New request from {ctx.author.name}: {user_request}")
+        await ctx.send("Your request has been sent.")
+    else:
+        await ctx.send("Could not find the specified user.")
+
+# Run the bot (replace 'YOUR_DISCORD_BOT_TOKEN' with your bot token)
+bot.run('MTEzOTUyMzI3NTI0MDc3MTYxNA.GNL5nR.HTQYgiTEAFc-4tWP1KFWS--FdpKrcClZqUXn9U')
